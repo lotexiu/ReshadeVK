@@ -1,0 +1,22 @@
+# --- Compilação e Binários ---
+builddir/
+meson-logs/
+meson-private/
+*.o
+*.a
+*.so
+*.out
+*.app
+
+# --- IDEs e Editores ---
+.vscode/
+.idea/
+*.swp
+*.swo
+.kateconfig
+.kdev4/
+*.kdev4
+
+# --- Outros ---
+.DS_Store
+*.log`;
