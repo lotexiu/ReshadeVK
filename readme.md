@@ -7,13 +7,10 @@ Este repositório contém as configurações básicas para programar em C++ usan
 No terminal, instale o grupo de desenvolvimento e os sistemas de build:
 
 ```bash
-# Compiladores e ferramentas base (g++, gdb, make)
-sudo dnf groupinstall "C Development Tools and Libraries" "Development Tools"
-
-OU
-
-# Sistemas de Build modernos
-sudo dnf install meson ninja-build cmake
+# Build
+sudo dnf install meson ninja-build cmake -y
+# Dependencias de sistema
+sudo dnf install gcc-c++ glfw-devel vulkan-devel vulkan-tools glslang -y
 ```
 
 ## 🧩 Extensões Recomendadas (VS Code)
