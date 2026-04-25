@@ -10,7 +10,7 @@ No terminal, instale o grupo de desenvolvimento e os sistemas de build:
 # Build
 sudo dnf install meson ninja-build cmake -y
 # Dependencias de sistema
-sudo dnf install gcc-c++ glfw-devel vulkan-devel vulkan-tools glslang -y
+sudo dnf install gcc-c++ glfw-devel vulkan-devel vulkan-tools vulkan-validation-layers glslang -y
 ```
 
 ## 🧩 Extensões Recomendadas (VS Code)

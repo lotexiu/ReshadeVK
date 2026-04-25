@@ -1,8 +1,11 @@
-#include <GLFW/glfw3.h>
-#include "vulkan/instance/declarations.hpp"
-#include "vulkan/video/declarations.hpp"
 #include <cstdio>
 #include <csignal>
+
+#include <GLFW/glfw3.h>
+
+#include "vulkan/instance/declarations.hpp"
+#include "vulkan/video/declarations.hpp"
+#include "vulkan/frames/declarations.hpp"
 
 static bool processActive = true;
 
@@ -32,8 +35,11 @@ int main() {
 	VulkanContext ctx{};
 	vk_create_instance(ctx);
 	vk_create_surface(ctx, window);
-	vk_pick_physical_device(ctx);   // novo
-	vk_create_logical_device(ctx);  // novo
+	vk_pick_physical_device(ctx);
+	vk_create_logical_device(ctx);
+	vk_create_swapchain(ctx, window);
+	vk_create_render_pass(ctx);
+	vk_create_framebuffers(ctx);
 
 	while (!glfwWindowShouldClose(window) && processActive) {
 		glfwPollEvents();

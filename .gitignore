@@ -20,3 +20,5 @@ meson-private/
 # --- Outros ---
 .DS_Store
 *.log`;
+
+reference
