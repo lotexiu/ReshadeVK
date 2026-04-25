@@ -1,18 +1,20 @@
+---
 Language: Cpp
 BasedOnStyle: WebKit
-
-# Usa Tabs para tudo
+# Força Tabs
 UseTab: Always
 IndentWidth: 2
 TabWidth: 2
 
-# Estilo de chaves (mantém na mesma linha, estilo TS/JS)
+# Indenta o #if (O seu problema anterior)
+IndentPPDirectives: BeforeHash
+
 BreakBeforeBraces: Attach
 
-# Deixa o código mais "espaçado" como no TS
 SpaceBeforeParens: ControlStatements
 SpaceInEmptyParentheses: false
 SpacesInAngles: false
 
-# Organiza includes automaticamente
+AllowShortFunctionsOnASingleLine: Empty
 SortIncludes: Never
+---

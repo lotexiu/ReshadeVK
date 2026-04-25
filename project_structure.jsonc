@@ -1,0 +1,150 @@
+{
+  // ╔══════════════════════════════════════════════════════════════════════════╗
+  // ║  Visão geral da arquitetura                                              ║
+  // ║                                                                          ║
+  // ║  utils/      →  framework genérico. Sabe tudo sobre Vulkan, hooks,      ║
+  // ║                 input e display servers. Expõe uma API de lifecycle      ║
+  // ║                 simples (onRender, onKeyboard, onMouse).                 ║
+  // ║                                                                          ║
+  // ║  reshadeVK/  →  layer concreta. Consome utils, define o que desenhar.   ║
+  // ║                 Não precisa saber nada de Vulkan internamente.           ║
+  // ║                                                                          ║
+  // ║  VKWindow/   →  janela Vulkan local para desenvolvimento e testes.       ║
+  // ║                 Simula um processo alvo sem precisar de um jogo real.    ║
+  // ╚══════════════════════════════════════════════════════════════════════════╝
+
+  "src": {
+
+    // ── reshadeVK ─────────────────────────────────────────────────────────────
+    // O produto concreto. Deve ser simples o suficiente para qualquer um ler
+    // e entender o que está sendo feito sem conhecer Vulkan.
+    // Toda a complexidade fica escondida dentro de utils/.
+    "reshadeVK": {
+      "layer.json.in":
+        "Manifesto lido pelo Vulkan Loader. Registra os entry-points exportados e as variáveis de ambiente ENABLE_RESHADEVK / DISABLE_RESHADEVK. O CMake substitui @library_path@ em tempo de configure.",
+
+      "entry.cpp":
+        "Único arquivo com 'extern C'. Exporta reshadevk_GetInstanceProcAddr e reshadevk_GetDeviceProcAddr — os dois símbolos que o Vulkan Loader procura. Delega tudo para utils::Layer internamente. Não contém lógica de negócio.",
+
+      "overlay.hpp / overlay.cpp":
+        "Define e implementa ReshadeOverlay, que herda de utils::LayerComponent.\nContém apenas o que o overlay faz — sem nenhum Vulkan explícito:\n\n  struct ReshadeOverlay : LayerComponent {\n    void onInit() override;\n    void onRender(RenderContext& ctx) override;\n    void onKeyboard(KeyEvent e) override;\n    void onMouse(MouseEvent e) override;\n    void onDestroy() override;\n  };\n\nExemplo de onRender:\n  ImGui::Begin('reshadeVK');\n  ImGui::Text('%.1f fps', ctx.fps());\n  ImGui::End();"
+    },
+
+    // ── VKWindow ──────────────────────────────────────────────────────────────
+    // Processo Vulkan local para desenvolvimento. Cria uma janela real com
+    // swapchain e roda a layer em cima, exatamente como um jogo faria.
+    // Permite iterar sem precisar injetar em um processo externo.
+    "VKWindow": {
+
+      "CMakeLists.txt":
+        "Compila VKWindow como executável standalone. Linka GLFW e Vulkan. Ativa a layer localmente via VK_INSTANCE_LAYERS apontando para o layer.json gerado.",
+
+      "main.cpp":
+        "Cria uma janela GLFW, inicializa Vulkan com a layer habilitada e roda o loop de apresentação. É intencionalmente mínimo — o objetivo é ter um processo Vulkan vivo para testar a layer, não um renderer completo.",
+
+      "app.hpp / app.cpp":
+        "Encapsula a inicialização Vulkan (instance, device, swapchain) e o loop principal. Não é parte do framework — existe apenas para dar um processo alvo de desenvolvimento."
+    },
+
+    // ── utils ─────────────────────────────────────────────────────────────────
+    // O framework. Tudo que é complexo fica aqui, escondido.
+    // Um consumidor (como reshadeVK) só precisa conhecer layer.hpp.
+    "utils": {
+
+      // ── API pública do framework ─────────────────────────────────────────
+      // Estes são os únicos arquivos que um desenvolvedor de layer precisa ler.
+
+      "layer.hpp / layer.cpp":
+        "Ponto de entrada público do framework. Define:\n\n  LayerComponent — classe base que o desenvolvedor herda:\n    virtual void onInit()\n    virtual void onRender(RenderContext&)\n    virtual void onKeyboard(KeyEvent)\n    virtual void onMouse(MouseEvent)\n    virtual void onDestroy()\n\n  RenderContext — o que está disponível dentro de onRender:\n    float fps()\n    VkExtent2D extent()\n    uint32_t imageIndex()\n    VkCommandBuffer cmd()  // disponível para quem quiser nível baixo\n\n  Layer::create(LayerComponent*) — registra o componente, detecta a API\n  gráfica do processo via process.hpp, seleciona o backend correto e\n  conecta os hooks. Uma layer funcional inteira:\n\n    Layer::create(new ReshadeOverlay());",
+
+      // ── Backends de API gráfica ──────────────────────────────────────────
+      // Cada subpasta implementa o mesmo contrato interno para uma API
+      // gráfica diferente. layer.cpp seleciona o correto via process.hpp.
+      // Nada daqui é exposto diretamente ao desenvolvedor de layer.
+      "api": {
+
+        "vulkan": {
+
+          "dispatch.hpp / dispatch.cpp":
+            "Tabelas de ponteiros PFN_vk* (X-Macro). fill_instance_dispatch() e fill_device_dispatch() resolvem os símbolos via vkGetInstanceProcAddr / vkGetDeviceProcAddr passados pelo loader. Detalhe interno.",
+
+          "state.hpp / state.cpp":
+            "InstanceData, DeviceData e SwapchainData — structs que carregam o estado de cada handle Vulkan vivo. Os mapas globais e o mutex vivem aqui. Detalhe interno.",
+
+          "renderer.hpp / renderer.cpp":
+            "Monta os recursos de um frame (render pass, framebuffers, command buffers, semáforos, fences) e chama LayerComponent::onRender() com o RenderContext preenchido. É o motor que roda a cada QueuePresentKHR.",
+
+          "imgui_loader.hpp / imgui_loader.cpp":
+            "Resolve os símbolos que ImGui_ImplVulkan_LoadFunctions exige a partir da dispatch table interna, contornando o fato de que a layer intercepta vkGetDeviceProcAddr. Detalhe interno.",
+
+          "hooks": {
+            // Interceptam o ciclo de vida dos objetos Vulkan e alimentam
+            // os mapas de state.hpp. Sem lógica de efeito visual aqui.
+
+            "instance.hpp / instance.cpp":
+              "hook_CreateInstance e hook_DestroyInstance. Extrai gipa da pNext chain, armazena InstanceData, repassa a chamada.",
+
+            "physicalDevice.hpp / physicalDevice.cpp":
+              "hook_EnumeratePhysicalDevices. Chama setInstanceLoaderData em cada VkPhysicalDevice para manter o rastreamento do loader.",
+
+            "device.hpp / device.cpp":
+              "hook_CreateDevice e hook_DestroyDevice. Extrai gdpa, seleciona fila gráfica, armazena DeviceData.",
+
+            "surface.hpp / surface.cpp":
+              "hook_DestroySurfaceKHR. Também intercepta glfwCreateWindowSurface quando VKLAYER_HAS_GLFW, associando GLFWwindow* à VkSurfaceKHR para uso pelo input.",
+
+            "swapchain.hpp / swapchain.cpp":
+              "hook_CreateSwapchainKHR → renderer::init().\nhook_DestroySwapchainKHR → renderer::destroy().\nhook_QueuePresentKHR → renderer::render_frame() com encadeamento de semáforos."
+          }
+        },
+
+        // Estrutura reservada para backends futuros.
+        // layer.cpp os seleciona automaticamente via process.hpp.
+        "opengl": {
+          "_placeholder": "Futuro. Interceptação via wglSwapBuffers / glXSwapBuffers."
+        },
+        "dxgi": {
+          "_placeholder": "Futuro. Interceptação via IDXGISwapChain::Present."
+        },
+        "d3d11": {
+          "_placeholder": "Futuro. Hooks de CreateDevice e Present via DXGI."
+        },
+        "d3d12": {
+          "_placeholder": "Futuro. Hooks de CreateDevice e ExecuteCommandLists."
+        }
+      },
+
+      // ── Input ────────────────────────────────────────────────────────────
+      // Abstração de fonte de eventos. layer.cpp escolhe o provider certo
+      // e entrega os eventos como KeyEvent/MouseEvent para o LayerComponent.
+      // O desenvolvedor nunca lida com X11, GLFW ou host bridge diretamente.
+      "input": {
+
+        "input.hpp / input.cpp":
+          "Define KeyEvent e MouseEvent. Declara InputProvider com poll() chamado a cada frame. Declara create_input_provider(ProcessInfo&) que retorna o provider adequado para o ambiente detectado.",
+
+        "host_bridge.hpp / host_bridge.cpp":
+          "Provider que lê input via reshadevk_host_get_input_state() — símbolo injetado por um processo externo. Útil em ambientes controlados ou ferramentas de automação.",
+
+        "glfw.hpp / glfw.cpp":
+          "Provider GLFW. Compilado apenas com VKLAYER_HAS_GLFW. Usado pelo VKWindow durante desenvolvimento.",
+
+        "x11.hpp / x11.cpp":
+          "Provider X11. Detecta janela ativa via _NET_ACTIVE_WINDOW, confirma PID e lê teclado com XQueryKeymap. Compilado apenas com VKLAYER_HAS_X11.",
+
+        "wayland.hpp / wayland.cpp":
+          "Provider Wayland (futuro). Compilado apenas com VKLAYER_HAS_WAYLAND."
+      },
+
+      // ── Utilitários gerais ───────────────────────────────────────────────
+      "logger.hpp / logger.cpp":
+        "Logger com níveis INFO / WARN / ERR e prefixo configurável. Em builds Release as macros viram no-op, sem custo em runtime. Sem dependências externas.",
+
+      "platform.hpp / platform.cpp":
+        "Detecta informações da máquina: OS, display server ativo (X11 ou Wayland via WAYLAND_DISPLAY), arquitetura. Define também VKLAYER_EXPORT para visibilidade de símbolo correta por plataforma. Usado por layer.cpp para saber quais providers estão disponíveis.",
+
+      "process.hpp / process.cpp":
+        "Inspeciona o processo alvo e retorna um ProcessInfo com:\n  - quais APIs gráficas estão carregadas (Vulkan, OpenGL, D3D) — via /proc/PID/maps no Linux ou equivalente Windows\n  - qual display server está em uso\n  - se há janela GLFW associada\n\nÉ aqui que a pergunta 'o que preciso para criar uma layer neste processo?' é respondida. Layer::create() consulta ProcessInfo para selecionar backend de API e provider de input sem que o desenvolvedor precise decidir nada."
+    }
+  }
+}
