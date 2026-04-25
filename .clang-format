@@ -1,0 +1,18 @@
+Language: Cpp
+BasedOnStyle: WebKit
+
+# Usa Tabs para tudo
+UseTab: Always
+IndentWidth: 2
+TabWidth: 2
+
+# Estilo de chaves (mantém na mesma linha, estilo TS/JS)
+BreakBeforeBraces: Attach
+
+# Deixa o código mais "espaçado" como no TS
+SpaceBeforeParens: ControlStatements
+SpaceInEmptyParentheses: false
+SpacesInAngles: false
+
+# Organiza includes automaticamente
+SortIncludes: Never
